@@ -1,8 +1,9 @@
 require('common');
 local chat = require('chat');
 local json = require('json');
+local keyitems = require('keyitems');
 
-addon.name    = 'Search'
+addon.name    = 'Where'
 addon.author  = 'Fiveside'
 addon.version = '0.1'
 addon.desc    = 'An addon for searching your inventory for items, similar to find'
@@ -21,11 +22,11 @@ addon.desc    = 'An addon for searching your inventory for items, similar to fin
 ---The order of this table is the order in which we will print results.
 ---@type ContainerSpec[]
 local CONTAINERS = T{
+    { id = 3,  name = "Temporary" },
     { id = 0,  name = "Inventory"},
     { id = 1,  name = "Safe" },
     { id = 9,  name = "Safe2" },
     { id = 2,  name = "Storage" },
-    { id = 3,  name = "Temporary" },
     { id = 4,  name = "Locker" },
     { id = 5,  name = "Satchel" },
     { id = 6,  name = "Sack" },
@@ -55,21 +56,23 @@ end);
 
 ashita.events.register('command', 'oncommand', function(e)
     local commands = {'/find', '/where', '/whereis'};
-    local searchTerm = '';
+    local args = '';
     for _, command in ipairs(commands) do
         if e.command:startswith(command) then
-            searchTerm = e.command:sub(command:len()+1);
+            args = e.command:sub(command:len()+1):clean();
         end
     end
-    if searchTerm == '' then
+    if args == '' then
         return;
     end
 
     e.blocked = true
 
     -- Resolve any autotranslate entries in the string
-    searchTerm = AshitaCore:GetChatManager():ParseAutoTranslate(searchTerm, true)
-    searchTerm = searchTerm:clean();
+    local searchTerm = AshitaCore:GetChatManager():ParseAutoTranslate(args, true)
+    searchTerm = searchTerm:strip_colors():strip_translate(false):clean();
+
+    local numResults = 0;
 
     local containerResults = findInContainers(searchTerm);
     for _, result in ipairs(containerResults) do
@@ -77,12 +80,20 @@ ashita.events.register('command', 'oncommand', function(e)
         if result.count > 1 then
             countStr = ' [' .. result.count .. ']';
         end
+        numResults = numResults + result.count;
         print(chat.header(addon.name) .. result.location .. ': ' .. chat.color(chat.colors.LawnGreen, result.name) .. countStr);
     end
 
+    for _, ki in keyitems.listObtained() do
+        if isMatchingItem(searchTerm, ki.name) then
+            numResults = numResults + 1;
+            print(chat.header(addon.name) .. 'Key Item: ' .. chat.color(chat.colors.RoyalBlue, ki.name));
+        end
+    end
+
     -- Summarize
-    local count = containerResults:map(function(v) return v.count; end):sum();
-    print(chat.header(addon.name) .. chat.success('Found ' .. tostring(count) .. ' results.'));
+    -- local count = containerResults:map(function(v) return v.count; end):sum();
+    print(chat.header(addon.name) .. chat.success('Found ') .. tostring(numResults) .. chat.success(' results for ') .. args .. chat.success('.'));
 end);
 
 ---@param searchTerm string The name of the item we're searching for
