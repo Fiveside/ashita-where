@@ -1,0 +1,1 @@
+This data is copied from Windower 4's resource files.  It was last updated 2026-06-12.

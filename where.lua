@@ -1,7 +1,9 @@
 require('common');
 local chat = require('chat');
 local json = require('json');
-local keyitems = require('keyitems');
+local KeyItems = require('keyitems');
+local Slips = require('slips');
+local Containers = require('containers');
 
 addon.name    = 'Where'
 addon.author  = 'Fiveside'
@@ -49,7 +51,25 @@ do
 end
 
 ashita.events.register("load", "onload", function ()
-end)
+end);
+
+-- ashita.events.register('packet_in', 'onpacket', function(e)
+--     local packets = {
+--         [0x17] = "GP_SERV_COMMAND_CHAT_STD",
+--         [0x27] = "GP_SERV_COMMAND_TALKNUMWORK2",
+--         [0x2A] = "GP_SERV_COMMAND_TALKNUMWORK",
+--         [0x32] = "GP_SERV_COMMAND_EVENT",
+--         [0x33] = "GP_SERV_COMMAND_EVENTSTR",
+--         [0x34] = "GP_SERV_COMMAND_EVENTNUM",
+--         [0x3B] = "GP_SERV_COMMAND_EVENTMES",
+--         [0x43] = "GP_SERV_COMMAND_TALKNUMNAME",
+--         [0x52] = "GP_SERV_COMMAND_EVENTUCOFF",
+--     }
+--     local name = packets[e.id];
+--     if name ~= nil then
+--         print("Got packet type: " .. name)
+--     end
+-- end);
 
 ashita.events.register("unload", "onunload", function ()
 end);
@@ -84,7 +104,18 @@ ashita.events.register('command', 'oncommand', function(e)
         print(chat.header(addon.name) .. result.location .. ': ' .. chat.color(chat.colors.LawnGreen, result.name) .. countStr);
     end
 
-    for _, ki in keyitems.listObtained() do
+    for _, result in Containers.listAllContainers() do
+        Slips.updateSlips(result.instance);
+    end
+
+    for _, result in Slips.listOwnedSlipContents() do
+        if isMatchingItem(searchTerm, result.item.Name[1]) then
+            numResults = numResults +1;
+            print(chat.header(addon.name) .. chat.color(chat.colors.LawnGreen, result.location) .. ': ' .. result.item.Name[1])
+        end
+    end
+
+    for _, ki in KeyItems.listObtained() do
         if isMatchingItem(searchTerm, ki.name) then
             numResults = numResults + 1;
             print(chat.header(addon.name) .. 'Key Item: ' .. chat.color(chat.colors.RoyalBlue, ki.name));
