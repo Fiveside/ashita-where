@@ -1,5 +1,6 @@
 
 ---An implementation of the double metaphone algorithm in pure lua
+---Based on Lawrence Philips' Double Metaphone algorithm
 ---@param input string The string to transform
 ---@return {[1]: string, [2]: string}
 function doubleMetaphone(input)
@@ -7,335 +8,254 @@ function doubleMetaphone(input)
         return {"", ""}
     end
 
-    -- Convert to uppercase and clean
+    -- Convert to uppercase
     local str = string.upper(input)
-    
-    -- Initialize primary and secondary keys
-    local primary = ""
-    local secondary = ""
     local length = #str
-    local index = 1
     
-    -- Helper function to get character at position
-    local function getChar(pos)
-        if pos < 1 or pos > length then return "" end
-        return string.sub(str, pos, pos)
+    -- Helper to check character at index
+    local function charAt(i)
+        if i < 1 or i > length then return "\0" end
+        return string.sub(str, i, i)
     end
     
-    -- Helper function to check if substring matches at position
-    local function matchAt(pos, patterns)
-        if type(patterns) == "string" then
-            patterns = {patterns}
-        end
-        for _, pattern in ipairs(patterns) do
-            if string.sub(str, pos, pos + #pattern - 1) == pattern then
+    -- Helper to check for match at position
+    local function stringAt(i, patterns)
+        if type(patterns) == "string" then patterns = {patterns} end
+        for _, p in ipairs(patterns) do
+            if i + #p - 1 <= length and string.sub(str, i, i + #p - 1) == p then
                 return true
             end
         end
         return false
     end
     
-    -- Helper function to check if character is vowel
-    local function isVowel(char)
-        return char == "A" or char == "E" or char == "I" or char == "O" or char == "U" or char == "Y"
+    -- Helper to check if character is vowel
+    local function isVowel(c)
+        return c == 'A' or c == 'E' or c == 'I' or c == 'O' or c == 'U' or c == 'Y'
     end
     
-    -- Skip leading non-alphabetic characters and handle special prefixes
-    while index <= length and not string.match(getChar(index), "[A-Z]") do
-        index = index + 1
+    local primary = ""
+    local secondary = ""
+    local i = 1
+    
+    -- Handle leading non-letters
+    if stringAt(1, {"GN"}) or stringAt(1, {"KN"}) or stringAt(1, {"WR"}) then
+        i = 2
     end
     
-    -- Handle special first letters
-    local firstChar = getChar(index)
-    if firstChar == "K" or firstChar == "G" or firstChar == "P" or firstChar == "W" or firstChar == "H" then
-        if index == 1 and getChar(2) == "N" then
-            if firstChar == "K" or firstChar == "G" then
-                primary = "N"
-                secondary = "N"
-            end
-        end
-    end
-    
-    if firstChar == "W" and getChar(2) == "R" then
-        primary = "R"
-        secondary = "R"
-        index = index + 2
-    elseif firstChar == "X" then
-        primary = "S"
-        secondary = "S"
-        index = index + 1
-    elseif firstChar == "H" and isVowel(getChar(2)) then
-        primary = getChar(2)
-        secondary = getChar(2)
-        index = index + 2
-    elseif firstChar == "A" then
+    -- Handle special initial letters
+    if stringAt(1, {"A", "E", "I", "O", "U", "Y"}) then
         primary = "A"
         secondary = "A"
-        index = index + 1
-    else
-        if primary == "" then
-            primary = firstChar
-            secondary = firstChar
-        end
-        index = index + 1
+        i = 2
     end
     
-    -- Process remaining characters
-    while index <= length do
-        local char = getChar(index)
-        local nextChar = getChar(index + 1)
+    -- Main encoding loop
+    while i <= length do
+        local c = charAt(i)
         
-        if char == "A" or char == "E" or char == "I" or char == "O" or char == "U" or char == "Y" then
-            if index == 1 then
-                primary = primary .. char
-                secondary = secondary .. char
+        if isVowel(c) then
+            if i == 1 then
+                primary = primary .. "A"
+                secondary = secondary .. "A"
             end
-            index = index + 1
-        elseif char == "B" then
-            if not (index + 1 > length and getChar(index - 1) == "M") then
+            i = i + 1
+        elseif c == 'B' then
+            if i == length and charAt(i - 1) == 'M' then
+                -- Skip final B after M
+            else
                 primary = primary .. "P"
                 secondary = secondary .. "P"
             end
-            if nextChar == "B" then
-                index = index + 2
-            else
-                index = index + 1
-            end
-        elseif char == "C" then
-            if index > 1 and not isVowel(getChar(index - 1)) and getChar(index - 1) ~= "" and getChar(index - 1) ~= "A" and getChar(index - 1) ~= "O" and getChar(index - 1) ~= "U" then
-                if nextChar == "H" then
-                    primary = primary .. "K"
-                    secondary = secondary .. "K"
-                    index = index + 2
-                else
-                    primary = primary .. "K"
-                    secondary = secondary .. "K"
-                    index = index + 1
-                end
-            elseif index == 1 and matchAt(index, "CAESAR") then
-                primary = primary .. "S"
-                secondary = secondary .. "S"
-                index = index + 1
-            elseif matchAt(index, {"CH"}) then
-                if index > 1 and matchAt(index - 1, {"S", "T", "C"}) then
-                    primary = primary .. "K"
-                    secondary = secondary .. "K"
-                else
+            i = i + (charAt(i + 1) == 'B' and 2 or 1)
+        elseif c == 'C' then
+            if stringAt(i, {"CH"}) then
+                if not stringAt(i - 1, {"S", "T", "C"}) and (i == 1 or not stringAt(i - 2, {"T", "D"})) then
                     primary = primary .. "X"
                     secondary = secondary .. "X"
-                end
-                index = index + 2
-            elseif matchAt(index, "CZ") and not matchAt(index - 2, "WI") then
-                primary = primary .. "S"
-                secondary = secondary .. "X"
-                index = index + 2
-            elseif matchAt(index + 1, "CIA") then
-                primary = primary .. "X"
-                secondary = secondary .. "X"
-                index = index + 3
-            elseif nextChar == "C" and not (index + 2 <= length and getChar(index + 2) == "E") then
-                primary = primary .. "K"
-                secondary = secondary .. "K"
-                index = index + 2
-            else
-                if nextChar == "E" or nextChar == "I" or nextChar == "Y" then
-                    primary = primary .. "S"
-                    secondary = secondary .. "S"
                 else
                     primary = primary .. "K"
                     secondary = secondary .. "K"
                 end
-                index = index + 1
+                i = i + 2
+            elseif stringAt(i, {"CIA"}) then
+                primary = primary .. "X"
+                secondary = secondary .. "X"
+                i = i + 3
+            elseif stringAt(i, {"CZ"}) and not stringAt(i - 2, {"WI"}) then
+                primary = primary .. "S"
+                secondary = secondary .. "X"
+                i = i + 2
+            elseif stringAt(i + 1, {"E", "I", "Y"}) then
+                primary = primary .. "S"
+                secondary = secondary .. "S"
+                i = i + 1
+            else
+                primary = primary .. "K"
+                secondary = secondary .. "K"
+                if stringAt(i + 1, {"K", "Q"}) then
+                    i = i + 2
+                else
+                    i = i + 1
+                end
             end
-        elseif char == "D" then
-            if nextChar == "G" and (index + 2 <= length and (getChar(index + 2) == "E" or getChar(index + 2) == "I" or getChar(index + 2) == "Y")) then
+        elseif c == 'D' then
+            if stringAt(i, {"DG"}) and stringAt(i + 2, {"E", "I", "Y"}) then
                 primary = primary .. "J"
                 secondary = secondary .. "J"
-                index = index + 3
+                i = i + 3
             else
                 primary = primary .. "T"
                 secondary = secondary .. "T"
-                index = index + 1
+                i = i + 1
             end
-        elseif char == "G" then
-            if nextChar == "H" then
-                if index > 1 and not isVowel(getChar(index - 1)) then
+        elseif c == 'G' then
+            if charAt(i + 1) == 'H' then
+                if i > 1 and not isVowel(charAt(i - 1)) then
                     primary = primary .. "K"
                     secondary = secondary .. "K"
-                    index = index + 2
-                elseif index == 1 then
-                    if getChar(index + 2) == "I" then
+                    i = i + 2
+                elseif i == 1 then
+                    if charAt(i + 2) == 'I' then
                         primary = primary .. "J"
                         secondary = secondary .. "J"
                     else
                         primary = primary .. "K"
                         secondary = secondary .. "K"
                     end
-                    index = index + 2
+                    i = i + 2
                 else
                     primary = primary .. "K"
                     secondary = secondary .. "K"
-                    index = index + 2
+                    i = i + 2
                 end
-            elseif nextChar == "N" then
-                if index == 1 and isVowel(getChar(2)) then
+            elseif charAt(i + 1) == 'N' then
+                if i == 1 and isVowel(charAt(2)) then
                     primary = primary .. "N"
                     secondary = secondary .. "NK"
                 else
                     primary = primary .. "NK"
                     secondary = secondary .. "NK"
                 end
-                index = index + 1
-            elseif (nextChar == "E" or nextChar == "I" or nextChar == "Y") and not matchAt(index - 1, {"A", "E", "I", "O", "U"}) then
-                primary = primary .. "K"
-                secondary = secondary .. "J"
-                index = index + 1
-            else
-                if nextChar == "G" then
-                    index = index + 2
-                else
-                    index = index + 1
-                end
-                primary = primary .. "K"
-                secondary = secondary .. "K"
-            end
-        elseif char == "H" then
-            if (index == 1 or isVowel(getChar(index - 1))) and isVowel(nextChar) then
-                primary = primary .. "H"
-                secondary = secondary .. "H"
-            end
-            index = index + 1
-        elseif char == "J" then
-            if matchAt(index, "JOSE") or (index == 1 and getChar(index + 1) == "O") then
-                primary = primary .. "H"
-                secondary = secondary .. "H"
-            else
+                i = i + 1
+            elseif stringAt(i + 1, {"E", "I", "Y"}) and not stringAt(i - 1, {"D", "T"}) then
                 primary = primary .. "J"
-                secondary = secondary .. "J"
-            end
-            index = index + 1
-        elseif char == "K" then
-            if index > 1 and getChar(index - 1) == "C" then
-                -- Skip
+                secondary = secondary .. "K"
+                i = i + 1
             else
                 primary = primary .. "K"
                 secondary = secondary .. "K"
+                i = i + (charAt(i + 1) == 'G' and 2 or 1)
             end
-            index = index + 1
-        elseif char == "L" then
+        elseif c == 'H' then
+            if (i == 1 or isVowel(charAt(i - 1))) and isVowel(charAt(i + 1)) then
+                primary = primary .. "H"
+                secondary = secondary .. "H"
+            end
+            i = i + 1
+        elseif c == 'J' then
+            primary = primary .. "J"
+            secondary = secondary .. "J"
+            i = i + 1
+        elseif c == 'K' then
+            if charAt(i - 1) ~= 'C' then
+                primary = primary .. "K"
+                secondary = secondary .. "K"
+            end
+            i = i + 1
+        elseif c == 'L' then
             primary = primary .. "L"
             secondary = secondary .. "L"
-            index = index + 1
-        elseif char == "M" then
-            if (index + 1 == length and getChar(index - 1) == "U" and getChar(index - 2) == "I") or matchAt(index + 1, {"E", "I"}) then
-                primary = primary .. "M"
-                secondary = secondary .. "M"
-            else
-                primary = primary .. "M"
-                secondary = secondary .. "M"
-            end
-            index = index + 1
-        elseif char == "N" then
+            i = i + 1
+        elseif c == 'M' then
+            primary = primary .. "M"
+            secondary = secondary .. "M"
+            i = i + 1
+        elseif c == 'N' then
             primary = primary .. "N"
             secondary = secondary .. "N"
-            index = index + 1
-        elseif char == "P" then
-            if nextChar == "H" then
+            i = i + 1
+        elseif c == 'P' then
+            if charAt(i + 1) == 'H' then
                 primary = primary .. "F"
                 secondary = secondary .. "F"
-                index = index + 2
+                i = i + 2
             else
                 primary = primary .. "P"
                 secondary = secondary .. "P"
-                if nextChar == "P" then
-                    index = index + 2
-                else
-                    index = index + 1
-                end
+                i = i + (charAt(i + 1) == 'P' and 2 or 1)
             end
-        elseif char == "Q" then
+        elseif c == 'Q' then
             primary = primary .. "K"
             secondary = secondary .. "K"
-            if nextChar == "Q" then
-                index = index + 2
-            else
-                index = index + 1
-            end
-        elseif char == "R" then
+            i = i + 1
+        elseif c == 'R' then
             primary = primary .. "R"
             secondary = secondary .. "R"
-            index = index + 1
-        elseif char == "S" then
-            if matchAt(index, {"SH"}) or matchAt(index, {"SIO"}) or matchAt(index, {"SIA"}) then
+            i = i + 1
+        elseif c == 'S' then
+            if stringAt(i, {"SH"}) then
                 primary = primary .. "X"
                 secondary = secondary .. "X"
-                index = index + 2
-            elseif index == 1 and matchAt(index, "SCH") then
+                i = i + 2
+            elseif stringAt(i, {"SIO", "SIA"}) then
                 primary = primary .. "X"
                 secondary = secondary .. "X"
-                index = index + 3
+                i = i + 3
             else
                 primary = primary .. "S"
                 secondary = secondary .. "S"
-                index = index + 1
+                i = i + (charAt(i + 1) == 'S' and 2 or 1)
             end
-        elseif char == "T" then
-            if matchAt(index, {"TH"}) then
-                if not (index + 2 <= length and (getChar(index + 2) == "A" or getChar(index + 2) == "U" or getChar(index + 2) == "I" or getChar(index + 2) == "E" or getChar(index + 2) == "O")) then
+        elseif c == 'T' then
+            if stringAt(i, {"TH"}) then
+                if i + 2 <= length and not stringAt(i + 2, {"A", "E", "I", "O", "U"}) then
                     primary = primary .. "0"
                     secondary = secondary .. "T"
                 else
                     primary = primary .. "0"
                     secondary = secondary .. "0"
                 end
-                index = index + 2
-            elseif matchAt(index, {"TIO"}) or matchAt(index, {"TIA"}) then
+                i = i + 2
+            elseif stringAt(i, {"TIO", "TIA"}) then
                 primary = primary .. "X"
                 secondary = secondary .. "X"
-                index = index + 3
-            elseif matchAt(index, "TCH") or (index > 1 and matchAt(index - 1, "T") and nextChar == "Z") then
+                i = i + 3
+            elseif stringAt(i, {"TCH"}) then
                 primary = primary .. "X"
                 secondary = secondary .. "X"
-                index = index + 1
+                i = i + 3
             else
                 primary = primary .. "T"
                 secondary = secondary .. "T"
-                index = index + 1
+                i = i + (charAt(i + 1) == 'T' and 2 or 1)
             end
-        elseif char == "V" then
+        elseif c == 'V' then
             primary = primary .. "F"
             secondary = secondary .. "F"
-            if nextChar == "V" then
-                index = index + 2
-            else
-                index = index + 1
+            i = i + 1
+        elseif c == 'W' then
+            if isVowel(charAt(i + 1)) then
+                primary = primary .. "W"
+                secondary = secondary .. "W"
             end
-        elseif char == "W" or char == "Y" then
-            if isVowel(nextChar) then
-                primary = primary .. char
-                secondary = secondary .. char
-            end
-            index = index + 1
-        elseif char == "X" then
+            i = i + 1
+        elseif c == 'X' then
             primary = primary .. "KS"
             secondary = secondary .. "KS"
-            index = index + 1
-        elseif char == "Z" then
-            if nextChar == "H" then
-                primary = primary .. "J"
-                secondary = secondary .. "J"
-                index = index + 2
-            else
-                primary = primary .. "S"
-                secondary = secondary .. "S"
-                if nextChar == "Z" then
-                    index = index + 2
-                else
-                    index = index + 1
-                end
+            i = i + 1
+        elseif c == 'Y' then
+            if isVowel(charAt(i + 1)) then
+                primary = primary .. "Y"
+                secondary = secondary .. "Y"
             end
+            i = i + 1
+        elseif c == 'Z' then
+            primary = primary .. "S"
+            secondary = secondary .. "S"
+            i = i + 1
         else
-            index = index + 1
+            i = i + 1
         end
     end
     
