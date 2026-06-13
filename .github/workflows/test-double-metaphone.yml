@@ -1,0 +1,41 @@
+name: Double Metaphone Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'fuzzy/**'
+      - '.github/workflows/test-double-metaphone.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'fuzzy/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install LuaJIT
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y luajit
+    
+    - name: Run Double Metaphone Tests
+      run: |
+        cd fuzzy
+        luajit run_tests.lua
+    
+    - name: Test Summary
+      if: always()
+      run: |
+        echo "## Double Metaphone Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ $? -eq 0 ]; then
+          echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Some tests failed. Check the logs for details." >> $GITHUB_STEP_SUMMARY
+        fi

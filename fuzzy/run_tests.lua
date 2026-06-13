@@ -3,7 +3,7 @@
 -- Test runner for double metaphone algorithm
 -- This script runs the test suite and reports failures
 
-local doubleMetaphone = require('fuzzy.double_metaphone')
+local doubleMetaphone = require('double_metaphone')
 
 local TEST_CASES = {
     { "ALLERTON",         "ALRTN",    "ALRTN" },
