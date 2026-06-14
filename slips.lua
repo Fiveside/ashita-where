@@ -52,8 +52,8 @@ function ownedSlipContentsIterator(slipNumber, index)
     for i = index, #data.items do
         -- Presence of an item in a slip is done by interpreting the extra
         -- data as a bitfield.
-        local byteIndex = math.modf(i / 8) + 1;
-        local bitmask = 2 ^ (i % 8);
+        local byteIndex = math.modf((i-1) / 8) + 1;
+        local bitmask = 2 ^ ((i-1) % 8);
         if bit.band(string.byte(slip.Extra, byteIndex), bitmask) > 0 then
             local itemId = data.items[i];
             local item = resources:GetItemById(itemId);

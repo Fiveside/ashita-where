@@ -40,15 +40,16 @@ end
 
 
 ---A stateless iterator that yields every item in the container specified;
----@param container containerId The id of the container we're looking through (Iterator Invariant)
+---@param containerIndex integer The index of the container we're looking through (Iterator Invariant)
 ---@param index integer The slot id of the container that we're currently inspecting
 ---@return integer?, {item: IItem, instance: item_t}?
-function containerIterator(container, index)
+function containerIterator(containerIndex, index)
     local inventory = AshitaCore:GetMemoryManager():GetInventory();
     local resources = AshitaCore:GetResourceManager();
+    local containerId = Export.CONTAINERS[containerIndex].id
 
-    while index < inventory:GetContainerCountMax(container) do
-        local containerItem = inventory:GetContainerItem(container, index);
+    while index < inventory:GetContainerCountMax(containerId) do
+        local containerItem = inventory:GetContainerItem(containerId, index);
         index = index + 1
         if containerItem ~= nil and containerItem.Id > 0 then
             local item = resources:GetItemById(containerItem.Id);
