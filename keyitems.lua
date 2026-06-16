@@ -1,7 +1,7 @@
 require('common');
 
 ---@type integer[]
-local KEY_ITEM_IDS = T{};
+local KEY_ITEM_IDS = T {};
 
 -- Discover which key items resolve to a name.
 -- 4096 is just a sanity number.  At the time of writing there
@@ -11,20 +11,20 @@ local KEY_ITEM_IDS = T{};
 -- order of the key item name, so that when we iterate
 -- later they stay sorted.
 do
-    local keyItems = T{};
+    local keyItems = T {};
     for id = 1, 4096 do
         local resources = AshitaCore:GetResourceManager();
         local res = resources:GetString("keyitems.names", id);
         if res ~= nil then
-            keyItems[#keyItems+1] = {id=id, name=res};
+            keyItems[#keyItems + 1] = { id = id, name = res };
         end
     end
 
-    table.sort(keyItems, function (a, b)
+    table.sort(keyItems, function(a, b)
         return a.name:lower() < b.name:lower();
     end)
     for _, ki in ipairs(keyItems) do
-        KEY_ITEM_IDS[#KEY_ITEM_IDS+1] = ki.id;
+        KEY_ITEM_IDS[#KEY_ITEM_IDS + 1] = ki.id;
     end
 end
 

@@ -1,11 +1,6 @@
 local Export = {};
 
----@alias containerId
----| integer An id representing an in-game inventory container
-
----@class ContainerSpec
----@field id containerId The container id the game uses to reference this
----@field name string The name of the container for printing.
+---@module 'definitions'
 
 ---The list of inventory containers players have.
 ---The order of this table is the order in which we will print results.
@@ -31,7 +26,7 @@ Export.CONTAINERS = T {
 };
 
 ---A mapping of container ids to their english names
-Export.CONTAINER_NAMES = T{}
+Export.CONTAINER_NAMES = T {}
 do
     for _, container in ipairs(Export.CONTAINERS) do
         Export.CONTAINER_NAMES[container.id] = container.name;
@@ -42,25 +37,31 @@ end
 ---A stateless iterator that yields every item in the container specified;
 ---@param containerIndex integer The index of the container we're looking through (Iterator Invariant)
 ---@param index integer The slot id of the container that we're currently inspecting
----@return integer?, {item: IItem, instance: item_t}?
+---@return integer?, SearchResult?
 function containerIterator(containerIndex, index)
     local inventory = AshitaCore:GetMemoryManager():GetInventory();
     local resources = AshitaCore:GetResourceManager();
-    local containerId = Export.CONTAINERS[containerIndex].id
+    local container = Export.CONTAINERS[containerIndex];
 
-    while index < inventory:GetContainerCountMax(containerId) do
-        local containerItem = inventory:GetContainerItem(containerId, index);
+    while index < inventory:GetContainerCountMax(container.id) do
+        local containerItem = inventory:GetContainerItem(container.id, index);
         index = index + 1
         if containerItem ~= nil and containerItem.Id > 0 then
             local item = resources:GetItemById(containerItem.Id);
-            return index, { item = item, instance = containerItem };
+            local result = {
+                item = item,
+                instance = containerItem,
+                location = container.name,
+                count = containerItem.Count
+            };
+            return index, result;
         end
     end
 end
 
 ---An iterator over all items in a container
 ---@param container containerId
----@return fun(): integer, {item: IItem, instance: item_t}
+---@return fun(): integer, {item: IItem, instance: item_t, location: string}
 ---@return containerId
 ---@return integer
 function Export.listContainerContents(container)
@@ -78,14 +79,13 @@ function inventoryIterator(containers, index)
             return index, item;
         end
         --We finished with this container, reset our index for the next
-        index = {container=index.container+1, index=1}
+        index = { container = index.container + 1, index = 1 }
     end
 end
 
 ---An iterator returning each item in our inventory
 function Export.listAllContainers()
-    return inventoryIterator, Export.CONTAINERS:map(function(x) return x.id end), {container=1, index=1}
+    return inventoryIterator, Export.CONTAINERS:map(function(x) return x.id end), { container = 1, index = 1 }
 end
-
 
 return Export;

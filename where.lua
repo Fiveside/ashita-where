@@ -1,122 +1,112 @@
 require('common');
-local chat = require('chat');
-local json = require('json');
-local KeyItems = require('keyitems');
-local Slips = require('slips');
+local chat       = require('chat');
+local KeyItems   = require('keyitems');
+local Slips      = require('slips');
 local Containers = require('containers');
 
-addon.name    = 'Where'
-addon.author  = 'Fiveside'
-addon.version = '0.1'
-addon.desc    = 'An addon for searching your inventory for items, similar to find'
+---@module 'definitions'
+
+addon.name       = 'Where'
+addon.author     = 'Fiveside'
+addon.version    = '0.1'
+addon.desc       = 'An addon for searching your inventory for items, similar to find'
+
+ashita.events.register("load", "onload", function()
+end);
+
+ashita.events.register("unload", "onunload", function()
+end);
 
 
----@class ContainerSpec
----@field id integer The container id the game uses to reference this
----@field name string The name of the container for printing.
-
----@class SearchResult
----@field name string The name of the item we found
----@field location string The container we found it in
----@field count integer The number of items in this location
-
----The list of inventory containers players have.
----The order of this table is the order in which we will print results.
----@type ContainerSpec[]
-local CONTAINERS = T{
-    { id = 3,  name = "Temporary" },
-    { id = 0,  name = "Inventory"},
-    { id = 1,  name = "Safe" },
-    { id = 9,  name = "Safe2" },
-    { id = 2,  name = "Storage" },
-    { id = 4,  name = "Locker" },
-    { id = 5,  name = "Satchel" },
-    { id = 6,  name = "Sack" },
-    { id = 7,  name = "Case" },
-    { id = 8,  name = "Wardrobe" },
-    { id = 10, name = "Wardrobe2" },
-    { id = 11, name = "Wardrobe3" },
-    { id = 12, name = "Wardrobe4" },
-    { id = 13, name = "Wardrobe5" },
-    { id = 14, name = "Wardrobe6" },
-    { id = 15, name = "Wardrobe7" },
-    { id = 16, name = "Wardrobe8" },
-};
-
-local CONTAINERS_BY_GAME_ID = T{};
-do
-    for _, container in ipairs(CONTAINERS) do
-        CONTAINERS_BY_GAME_ID[container.id] = container.name;
+---Takes a full command and splits it into the slash command,
+---a rich version of the arguments, and a clean version of the arguments
+---@param command string The full command being invoked
+---@return string? Just the slash command
+---@return string? The rich arguments
+---@return string? The sanitized arguments
+function cleanCommand(command)
+    local idx = string.find(command, '%s');
+    if idx == nil then
+        return nil
     end
+    local slashCommand = command:sub(1, idx - 1):clean();
+    local richArgs = command:sub(idx + 1):clean();
+
+    -- Resolve any autotranslate entries in the string
+    local sanitized = AshitaCore:GetChatManager():ParseAutoTranslate(richArgs, true);
+    sanitized = sanitized:strip_colors():strip_translate(false):clean();
+    return slashCommand, richArgs, sanitized;
 end
 
-ashita.events.register("load", "onload", function ()
-end);
-
--- ashita.events.register('packet_in', 'onpacket', function(e)
---     local packets = {
---         [0x17] = "GP_SERV_COMMAND_CHAT_STD",
---         [0x27] = "GP_SERV_COMMAND_TALKNUMWORK2",
---         [0x2A] = "GP_SERV_COMMAND_TALKNUMWORK",
---         [0x32] = "GP_SERV_COMMAND_EVENT",
---         [0x33] = "GP_SERV_COMMAND_EVENTSTR",
---         [0x34] = "GP_SERV_COMMAND_EVENTNUM",
---         [0x3B] = "GP_SERV_COMMAND_EVENTMES",
---         [0x43] = "GP_SERV_COMMAND_TALKNUMNAME",
---         [0x52] = "GP_SERV_COMMAND_EVENTUCOFF",
---     }
---     local name = packets[e.id];
---     if name ~= nil then
---         print("Got packet type: " .. name)
---     end
--- end);
-
-ashita.events.register("unload", "onunload", function ()
-end);
-
 ashita.events.register('command', 'oncommand', function(e)
-    local commands = {'/find', '/where', '/whereis'};
-    local args = '';
-    for _, command in ipairs(commands) do
-        if e.command:startswith(command) then
-            args = e.command:sub(command:len()+1):clean();
-        end
-    end
-    if args == '' then
+    local command, rich, sanitized = cleanCommand(e.command);
+    local commands = T { '/find', '/where', '/whereis' };
+    if command == nil or not commands:contains(command) then
         return;
     end
 
-    e.blocked = true
+    -- Nil already checked for command, and cleanCommand only returns all nil or all string
+    ---@cast rich string
+    ---@cast sanitized string
 
-    -- Resolve any autotranslate entries in the string
-    local searchTerm = AshitaCore:GetChatManager():ParseAutoTranslate(args, true)
-    searchTerm = searchTerm:strip_colors():strip_translate(false):clean();
+    e.blocked = true
 
     local numResults = 0;
 
-    local containerResults = findInContainers(searchTerm);
-    for _, result in ipairs(containerResults) do
-        local countStr = '';
-        if result.count > 1 then
-            countStr = ' [' .. result.count .. ']';
-        end
-        numResults = numResults + result.count;
-        print(chat.header(addon.name) .. result.location .. ': ' .. chat.color(chat.colors.LawnGreen, result.name) .. countStr);
+    ---@type table<string, table<string, integer>>
+    local containerResults = T {};
+    for _, name in pairs(Containers.CONTAINER_NAMES) do
+        containerResults[name] = T {};
     end
 
     for _, result in Containers.listAllContainers() do
         Slips.updateSlips(result.instance);
+        local name = result.item.Name[1];
+        if isMatchingItem(sanitized, name) then
+            local resultCount = containerResults[result.location][name];
+            if resultCount == nil then
+                resultCount = 0;
+            end
+            containerResults[result.location][name] = resultCount + result.count;
+        end
+    end
+
+    for _, container in ipairs(Containers.CONTAINERS) do
+        local searchRes = containerResults[container.name];
+        local names = searchRes:keys();
+        table.sort(names);
+        for _, name in ipairs(names) do
+            local count = searchRes[name];
+            local countStr = '';
+            if count > 1 then
+                countStr = ' [' .. count .. ']';
+            end
+            numResults = numResults + count;
+            print(table.concat({
+                chat.header(addon.name),
+                container.name,
+                ": ",
+                chat.color(chat.colors.LawnGreen, name),
+                countStr
+            }));
+        end
     end
 
     for _, result in Slips.listOwnedSlipContents() do
-        if isMatchingItem(searchTerm, result.item.Name[1]) then
-            numResults = numResults +1;
-            print(chat.header(addon.name) .. chat.color(chat.colors.LawnGreen, result.location) .. ': ' .. result.item.Name[1])
+        if isMatchingItem(sanitized, result.item.Name[1]) then
+            numResults = numResults + 1;
+            -- print(chat.header(addon.name) .. chat.color(chat.colors.LawnGreen, result.location) .. ': ' .. result.item.Name[1])
+            print(table.concat({
+                chat.header(addon.name),
+                chat.color(chat.colors.LawnGreen, result.location),
+                ': ',
+                result.item.Name[1],
+            }))
         end
     end
 
     for _, ki in KeyItems.listObtained() do
-        if isMatchingItem(searchTerm, ki.name) then
+        if isMatchingItem(sanitized, ki.name) then
             numResults = numResults + 1;
             print(chat.header(addon.name) .. 'Key Item: ' .. chat.color(chat.colors.RoyalBlue, ki.name));
         end
@@ -124,52 +114,16 @@ ashita.events.register('command', 'oncommand', function(e)
 
     -- Summarize
     -- local count = containerResults:map(function(v) return v.count; end):sum();
-    print(chat.header(addon.name) .. chat.success('Found ') .. tostring(numResults) .. chat.success(' results for ') .. args .. chat.success('.'));
+    -- print(chat.header(addon.name) .. chat.success('Found ') .. tostring(numResults) .. chat.success(' results for ') .. rich .. chat.success('.'));
+    print(table.concat({
+        chat.header(addon.name),
+        chat.success('Found '),
+        tostring(numResults),
+        chat.success(' results for '),
+        rich,
+        chat.success('.'),
+    }));
 end);
-
----@param searchTerm string The name of the item we're searching for
-function findInContainers(searchTerm)
-    local inventory = AshitaCore:GetMemoryManager():GetInventory();
-    local resources = AshitaCore:GetResourceManager();
-
-    ---@type SearchResult[]
-    local searchResults = T{};
-    for _, container in ipairs(CONTAINERS) do
-        local containerResults = T{};
-
-        -- I'd like to use GetContainerCount here, but for some reason
-        -- the list of items in a container is sparse.
-        -- it contains zeros and has valid indices above
-        -- the number returned by GetContainerCount
-        for slotId = 1, inventory:GetContainerCountMax(container.id) do
-            local containerItem = inventory:GetContainerItem(container.id, slotId);
-            if containerItem ~= nil and containerItem.Id > 0 then
-                -- message ('Found item id: ' .. item.Id);
-                local item = resources:GetItemById(containerItem.Id);
-                local itemName = item.Name[1];
-                if isMatchingItem(searchTerm, itemName) then
-                    if containerResults[itemName] == nil then
-                        containerResults[itemName] = 0;
-                    end
-                    containerResults[itemName] = containerResults[itemName] + containerItem.Count;
-                end
-            end
-        end
-
-        -- We want the serach results to be relatively consistent, so
-        -- sort the results that we found in the current container before
-        -- recording the results
-        local sorted = containerResults:keys():sort():each(function (name)
-            searchResults[#searchResults+1] = {
-                name = name,
-                count = containerResults[name],
-                location = CONTAINERS_BY_GAME_ID[container.id],
-            };
-        end);
-    end
-
-    return searchResults;
-end
 
 ---@param searchTerm string The name of the item we're looking for
 ---@param item string the string we're testing
